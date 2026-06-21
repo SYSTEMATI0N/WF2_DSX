@@ -10,6 +10,8 @@ const int sendIntervalMilliseconds = 50;
 const int telemetryTimeoutMilliseconds = 500;
 
 var pinoPort = ReadPinoPort(args, defaultPinoPort);
+var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+var telemetryConfiguration = TelemetryConfigurator.EnsureEnabled(documentsPath, pinoPort);
 using var telemetryReceiver = new UdpClient(new IPEndPoint(IPAddress.Loopback, pinoPort));
 using var dsxSender = new UdpClient();
 var dsxEndpoint = new IPEndPoint(IPAddress.Loopback, dsxPort);
@@ -23,6 +25,21 @@ Console.CancelKeyPress += (_, eventArgs) =>
 Console.WriteLine("WF2_DSX");
 Console.WriteLine($"Wreckfest 2 Pino: UDP {pinoPort}");
 Console.WriteLine($"DSX: 127.0.0.1:{dsxPort} (fixed)");
+if (telemetryConfiguration.Found)
+{
+    foreach (var path in telemetryConfiguration.ConfigPaths)
+        Console.WriteLine($"Telemetry config: {path}");
+    Console.WriteLine(telemetryConfiguration.Changed
+        ? "Telemetry was enabled automatically. Restart Wreckfest 2 if it is already running."
+        : "Telemetry config is enabled.");
+}
+else
+{
+    Console.WriteLine($"Telemetry config not found below: {documentsPath}");
+    Console.WriteLine("Launch and exit Wreckfest 2 once, then restart WF2_DSX.");
+}
+foreach (var error in telemetryConfiguration.Errors)
+    Console.WriteLine($"Telemetry config error: {error}");
 Console.WriteLine("Waiting for Pino Main telemetry. Press Ctrl+C to stop.");
 
 var clock = Stopwatch.StartNew();

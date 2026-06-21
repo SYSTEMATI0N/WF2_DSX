@@ -79,6 +79,37 @@ Run("maps inactive player to a complete controller reset", () =>
     Assert(json.Contains("[0,2,0,0,0,0]"), "right trigger reset");
 });
 
+Run("enables telemetry below the supplied Windows Documents known folder", () =>
+{
+    var documents = Path.Combine(Path.GetTempPath(), $"WF2_DSX_{Guid.NewGuid():N}", "OneDrive Documents");
+    var configPath = Path.Combine(documents, "My Games", "Wreckfest 2", "123456789", "savegame", "telemetry", "config.json");
+    Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
+    File.WriteAllText(configPath, """
+        {
+          "udp": [{ "enabled": 0, "ip": "127.0.0.1", "port": "23123" }],
+          "logging": [{ "format": "none" }],
+          "server": [{ "enabled": 0, "automaticMainCar": 0 }]
+        }
+        """);
+
+    try
+    {
+        var result = TelemetryConfigurator.EnsureEnabled(documents, 23123);
+        var saved = File.ReadAllText(configPath);
+
+        Assert(result.Found, "config not found below supplied Documents folder");
+        Assert(result.Changed, "disabled config not changed");
+        Assert(result.ConfigPaths.Single() == configPath, "wrong config path");
+        Assert(saved.Contains("\"enabled\": 1"), "UDP not enabled");
+        Assert(saved.Contains("\"port\": \"23123\""), "port must remain a string");
+        Assert(saved.Contains("\"logging\""), "unrelated config section lost");
+    }
+    finally
+    {
+        Directory.Delete(Path.GetDirectoryName(documents)!, recursive: true);
+    }
+});
+
 if (failures.Count > 0)
 {
     Console.Error.WriteLine($"FAILED: {failures.Count}");
