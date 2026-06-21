@@ -44,6 +44,41 @@ Run("rejects invalid signature and truncated packets", () =>
     Assert(!PinoMainDecoder.TryDecode(packet.AsSpan(0, 100), out _), "truncated packet accepted");
 });
 
+Run("maps driving telemetry to DSX instructions on controller zero", () =>
+{
+    var telemetry = new TelemetryFrame(
+        InRace: true, PlayerDriving: true, EngineRunning: true, EngineMisfiring: false,
+        AbsActive: true, TcsActive: false, Driveline: DrivelineType.RearWheelDrive,
+        Gear: 3, EngineRpm: 6000, EngineRpmMax: 7500, EngineRpmRedline: 6900,
+        Throttle: 0.8f, Brake: 0.6f, Clutch: 0, WaterTemperatureCelsius: 110,
+        EngineDamage: 0, GearboxDamage: 0,
+        TireSlipRatios: [0.02f, 0.01f, 0.45f, 0.4f]);
+
+    var packet = DsxMapper.Map(telemetry, elapsedMilliseconds: 1000);
+    var json = DsxJson.Serialize(packet);
+
+    Assert(packet.Instructions.Count == 5, "instruction count");
+    Assert(json.Contains("\"instructions\""), "JSON packet property");
+    Assert(json.Contains("\"type\":2"), "RGB instruction");
+    Assert(json.Contains("[0,1,17,0,4,10]"), "ABS trigger instruction");
+    Assert(json.Contains("[0,true,true,true,false,false]"), "third gear LEDs");
+    Assert(json.Contains("\"type\":5,\"parameters\":[0,1]"), "temperature pulse");
+});
+
+Run("maps inactive player to a complete controller reset", () =>
+{
+    var telemetry = new TelemetryFrame(
+        InRace: false, PlayerDriving: false, EngineRunning: false, EngineMisfiring: false,
+        AbsActive: false, TcsActive: false, Driveline: DrivelineType.FrontWheelDrive,
+        Gear: 0, EngineRpm: 0, EngineRpmMax: 0, EngineRpmRedline: 0,
+        Throttle: 0, Brake: 0, Clutch: 0, WaterTemperatureCelsius: 0,
+        EngineDamage: 0, GearboxDamage: 0, TireSlipRatios: [0, 0, 0, 0]);
+
+    var json = DsxJson.Serialize(DsxMapper.Map(telemetry, 0));
+    Assert(json.Contains("[0,1,0,0,0,0]"), "left trigger reset");
+    Assert(json.Contains("[0,2,0,0,0,0]"), "right trigger reset");
+});
+
 if (failures.Count > 0)
 {
     Console.Error.WriteLine($"FAILED: {failures.Count}");
