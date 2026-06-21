@@ -19,3 +19,7 @@ The bridge sends at most 20 updates per second, matching the BeamNG mod. If tele
 stops for 500 ms it resets adaptive triggers and controller LEDs.
 
 Optional diagnostic override: `WF2_DSX.exe --pino-port 23124`. The DSX port cannot be changed.
+
+Wreckfest 2 creates `telemetry/config.json` inside the Steam-ID-specific
+`Documents/My Games/Wreckfest 2/.../savegame` directory. Its `udp` property is
+an array; set the first entry's `enabled` value to `1` and keep port `"23123"`.
