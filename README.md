@@ -19,7 +19,14 @@ The two ports must differ because WF2_DSX receives Pino while DSX already owns U
 The bridge sends at most 20 updates per second, matching the BeamNG mod. If telemetry
 stops for 500 ms it resets adaptive triggers and controller LEDs.
 
-Optional diagnostic override: `WF2_DSX.exe --pino-port 23124`. The DSX port cannot be changed.
+Optional Pino input override: `WF2_DSX.exe --pino-port 23124`. The DSX port cannot be changed.
+
+## Diagnostic mode
+
+Run `WF2_DSX.exe --diagnostic`. DSX effects remain active while full-rate Pino
+samples are written to `diagnostics/wf2_telemetry_YYYYMMDD_HHMMSS.csv` beside
+the executable. Stop with Ctrl+C after recording representative driving,
+wheelspin, braking, ABS, collisions, jumps, and damaged-car behavior.
 
 Wreckfest 2 creates `telemetry/config.json` inside the Steam-ID-specific
 `Documents/My Games/Wreckfest 2/.../savegame` directory. WF2_DSX resolves

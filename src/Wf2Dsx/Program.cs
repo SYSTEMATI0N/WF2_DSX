@@ -10,6 +10,7 @@ const int sendIntervalMilliseconds = 50;
 const int telemetryTimeoutMilliseconds = 500;
 
 var pinoPort = ReadPinoPort(args, defaultPinoPort);
+var diagnosticMode = args.Any(argument => argument.Equals("--diagnostic", StringComparison.OrdinalIgnoreCase));
 var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
 var telemetryConfiguration = TelemetryConfigurator.EnsureEnabled(documentsPath, pinoPort);
 using var telemetryReceiver = new UdpClient(new IPEndPoint(IPAddress.Loopback, pinoPort));
@@ -40,6 +41,25 @@ else
 }
 foreach (var error in telemetryConfiguration.Errors)
     Console.WriteLine($"Telemetry config error: {error}");
+StreamWriter? diagnosticWriter = null;
+var diagnosticRows = 0;
+if (diagnosticMode)
+{
+    try
+    {
+        var diagnosticsDirectory = Path.Combine(AppContext.BaseDirectory, "diagnostics");
+        Directory.CreateDirectory(diagnosticsDirectory);
+        var diagnosticPath = Path.Combine(diagnosticsDirectory, $"wf2_telemetry_{DateTime.Now:yyyyMMdd_HHmmss}.csv");
+        diagnosticWriter = new StreamWriter(diagnosticPath, false, new UTF8Encoding(false), 65_536);
+        diagnosticWriter.WriteLine(DiagnosticCsv.Header);
+        diagnosticWriter.Flush();
+        Console.WriteLine($"DIAGNOSTIC MODE: {diagnosticPath}");
+    }
+    catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+    {
+        Console.WriteLine($"Diagnostic mode unavailable: {exception.Message}");
+    }
+}
 Console.WriteLine("Waiting for Pino Main telemetry. Press Ctrl+C to stop.");
 
 var clock = Stopwatch.StartNew();
@@ -58,6 +78,22 @@ try
         {
             var datagram = await telemetryReceiver.ReceiveAsync(receiveTimeout.Token);
             if (!PinoMainDecoder.TryDecode(datagram.Buffer, out var telemetry)) continue;
+
+            if (diagnosticWriter is not null)
+            {
+                diagnosticWriter.WriteLine(DiagnosticCsv.FormatRow(telemetry, clock.ElapsedMilliseconds));
+                diagnosticRows++;
+                if (diagnosticRows % 60 == 0) diagnosticWriter.Flush();
+                if (diagnosticRows % 120 == 0)
+                {
+                    var peakSlip = telemetry.TireSlipRatios.Max(slip => MathF.Abs(slip));
+                    var acceleration = telemetry.AccelerationLocal ?? [0, 0, 0];
+                    var accelerationMagnitude = MathF.Sqrt(acceleration.Sum(axis => axis * axis));
+                    Console.WriteLine($"DIAG rows={diagnosticRows} speed={telemetry.SpeedMetersPerSecond * 3.6f:F0}km/h " +
+                        $"rpm={telemetry.EngineRpm} slip={peakSlip:F2} accel={accelerationMagnitude:F1}m/s² " +
+                        $"health={telemetry.Health}");
+                }
+            }
 
             lastPacket = clock.ElapsedMilliseconds;
             resetSent = false;
@@ -85,6 +121,7 @@ try
 }
 finally
 {
+    diagnosticWriter?.Dispose();
     await SendAsync(DsxMapper.Reset(), CancellationToken.None);
 }
 
