@@ -32,9 +32,24 @@ public static class PinoMainDecoder
         var waterKelvin = ReadFloat(packet, EngineOffset + 29);
 
         var slips = new float[4];
+        var slipAngles = new float[4];
+        var loads = new float[4];
+        var lateralForces = new float[4];
+        var longitudinalForces = new float[4];
+        var suspensionVelocities = new float[4];
+        var suspensionDisplacements = new float[4];
+        var surfaces = new byte[4];
         for (var tire = 0; tire < slips.Length; tire++)
         {
-            slips[tire] = ReadFloat(packet, TiresOffset + tire * TireSize + 8);
+            var offset = TiresOffset + tire * TireSize;
+            slips[tire] = ReadFloat(packet, offset + 8);
+            slipAngles[tire] = ReadFloat(packet, offset + 12);
+            loads[tire] = ReadFloat(packet, offset + 20);
+            lateralForces[tire] = ReadFloat(packet, offset + 24);
+            longitudinalForces[tire] = ReadFloat(packet, offset + 28);
+            suspensionVelocities[tire] = ReadFloat(packet, offset + 40);
+            suspensionDisplacements[tire] = ReadFloat(packet, offset + 48);
+            surfaces[tire] = packet[offset + 56];
         }
 
         value = new TelemetryFrame(
@@ -55,7 +70,25 @@ public static class PinoMainDecoder
             WaterTemperatureCelsius: waterKelvin > 0 ? waterKelvin - 273.15f : 0,
             EngineDamage: ReadDamageState(packet, 0),
             GearboxDamage: ReadDamageState(packet, 1),
-            TireSlipRatios: slips);
+            TireSlipRatios: slips,
+            SessionTime: ReadInt32(packet, 6),
+            RaceTime: ReadInt32(packet, 10),
+            SpeedMetersPerSecond: ReadFloat(packet, DrivelineOffset + 3),
+            EngineTorque: ReadFloat(packet, EngineOffset + 17),
+            EnginePower: ReadFloat(packet, EngineOffset + 21),
+            Handbrake: ReadFloat(packet, InputOffset + 12),
+            Steering: ReadFloat(packet, InputOffset + 16),
+            FfbForce: ReadFloat(packet, 1_093),
+            Health: packet[21],
+            LastCollisionTime: ReadInt32(packet, 305),
+            AccelerationLocal: [ReadFloat(packet, 568), ReadFloat(packet, 572), ReadFloat(packet, 576)],
+            TireSlipAngles: slipAngles,
+            TireLoadsVertical: loads,
+            TireForcesLateral: lateralForces,
+            TireForcesLongitudinal: longitudinalForces,
+            SuspensionVelocities: suspensionVelocities,
+            SuspensionDisplacementsNormalized: suspensionDisplacements,
+            SurfaceTypes: surfaces);
         return true;
     }
 

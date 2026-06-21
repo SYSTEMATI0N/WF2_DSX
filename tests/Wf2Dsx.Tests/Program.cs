@@ -15,6 +15,18 @@ Run("decodes Pino Main engine, input, gear and tire fields", () =>
     packet[411] = 4; // 3rd gear: 0=R, 1=N, 2=1st
     WriteFloat(packet, 490, 0.75f);
     WriteFloat(packet, 494, 0.4f);
+    WriteFloat(packet, 413, 25f);
+    WriteFloat(packet, 502, 0.2f);
+    WriteFloat(packet, 506, -0.3f);
+    WriteFloat(packet, 568, 4f);
+    WriteFloat(packet, 572, -2f);
+    WriteFloat(packet, 576, 9f);
+    WriteFloat(packet, 592, 0.12f);
+    WriteFloat(packet, 620, -1.5f);
+    packet[636] = 4; // gravel
+    WriteFloat(packet, 1093, -0.65f);
+    packet[21] = 77;
+    WriteInt32(packet, 305, 1234);
     packet[350] = 1; // ABS active
     packet[434] = 1; // engine running
     WriteFloat(packet, 463, 388.15f); // 115 C water
@@ -35,6 +47,16 @@ Run("decodes Pino Main engine, input, gear and tire fields", () =>
     AssertNear(value.TireSlipRatios[0], 0.35f, "FL slip");
     AssertNear(value.TireSlipRatios[1], -0.22f, "FR slip");
     Assert(value.PlayerDriving, "player status");
+    AssertNear(value.SpeedMetersPerSecond, 25f, "speed");
+    AssertNear(value.Handbrake, 0.2f, "handbrake");
+    AssertNear(value.Steering, -0.3f, "steering");
+    AssertNear(value.AccelerationLocal![2], 9f, "longitudinal acceleration");
+    AssertNear(value.TireSlipAngles![0], 0.12f, "FL slip angle");
+    AssertNear(value.SuspensionVelocities![0], -1.5f, "FL suspension velocity");
+    Assert(value.SurfaceTypes![0] == 4, "FL surface");
+    AssertNear(value.FfbForce, -0.65f, "FFB force");
+    Assert(value.Health == 77, "health");
+    Assert(value.LastCollisionTime == 1234, "collision time");
 });
 
 Run("rejects invalid signature and truncated packets", () =>
