@@ -32,6 +32,8 @@ public static class DsxMapper
         return new DsxPacket(instructions);
     }
 
+    public static DsxPacket Reset() => InactivePacket();
+
     private static DsxInstruction BrakeTrigger(TelemetryFrame telemetry)
     {
         var lockup = telemetry.TireSlipRatios.Max(slip => MathF.Max(0, -slip));

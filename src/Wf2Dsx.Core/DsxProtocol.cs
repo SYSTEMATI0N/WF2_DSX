@@ -19,4 +19,3 @@ public static class DsxJson
 
     public static string Serialize(DsxPacket packet) => JsonSerializer.Serialize(packet, Options);
 }
-
