@@ -132,6 +132,34 @@ Run("enables telemetry below the supplied Windows Documents known folder", () =>
     }
 });
 
+Run("formats extended telemetry as invariant diagnostic CSV", () =>
+{
+    var telemetry = new TelemetryFrame(
+        InRace: true, PlayerDriving: true, EngineRunning: true, EngineMisfiring: false,
+        AbsActive: true, TcsActive: false, Driveline: DrivelineType.RearWheelDrive,
+        Gear: 2, EngineRpm: 5432, EngineRpmMax: 7000, EngineRpmRedline: 6500,
+        Throttle: 0.75f, Brake: 0.25f, Clutch: 0, WaterTemperatureCelsius: 101.5f,
+        EngineDamage: 1, GearboxDamage: 2, TireSlipRatios: [0.1f, -0.2f, 0.3f, 0.4f],
+        SessionTime: 5000, RaceTime: 4000, SpeedMetersPerSecond: 20,
+        EngineTorque: 350, EnginePower: 120000, Handbrake: 0.1f, Steering: -0.5f,
+        FfbForce: 0.6f, Health: 83, LastCollisionTime: 3900,
+        AccelerationLocal: [1, 2, 3], TireSlipAngles: [0.01f, 0.02f, 0.03f, 0.04f],
+        TireLoadsVertical: [1000, 1100, 1200, 1300],
+        TireForcesLateral: [10, 20, 30, 40], TireForcesLongitudinal: [50, 60, 70, 80],
+        SuspensionVelocities: [0.1f, 0.2f, 0.3f, 0.4f],
+        SuspensionDisplacementsNormalized: [0.5f, 0.6f, 0.7f, 0.8f],
+        SurfaceTypes: [2, 2, 4, 4]);
+
+    var header = DiagnosticCsv.Header;
+    var row = DiagnosticCsv.FormatRow(telemetry, 12345);
+
+    Assert(header.Contains("fl_slip_ratio,fl_slip_angle"), "wheel columns missing");
+    Assert(header.Contains("accel_x,accel_y,accel_z"), "acceleration columns missing");
+    Assert(row.StartsWith("12345,5000,4000,72"), "time or speed conversion");
+    Assert(row.Contains(",0.75,0.25,"), "invariant pedal values");
+    Assert(row.Split(',').Length == header.Split(',').Length, "CSV column count mismatch");
+});
+
 if (failures.Count > 0)
 {
     Console.Error.WriteLine($"FAILED: {failures.Count}");
