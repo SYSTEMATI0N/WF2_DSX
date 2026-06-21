@@ -160,6 +160,16 @@ Run("formats extended telemetry as invariant diagnostic CSV", () =>
     Assert(row.Split(',').Length == header.Split(',').Length, "CSV column count mismatch");
 });
 
+Run("treats requested cancellation as a clean shutdown", () =>
+{
+    using var cancellation = new CancellationTokenSource();
+    cancellation.Cancel();
+
+    CancellationGuard.RunAsync(
+        token => Task.FromCanceled(token),
+        cancellation.Token).GetAwaiter().GetResult();
+});
+
 if (failures.Count > 0)
 {
     Console.Error.WriteLine($"FAILED: {failures.Count}");

@@ -70,60 +70,71 @@ var resetSent = false;
 
 try
 {
-    while (!stopping.IsCancellationRequested)
+    await CancellationGuard.RunAsync(async cancellationToken =>
     {
-        using var receiveTimeout = CancellationTokenSource.CreateLinkedTokenSource(stopping.Token);
-        receiveTimeout.CancelAfter(telemetryTimeoutMilliseconds);
-        try
+        while (!cancellationToken.IsCancellationRequested)
         {
-            var datagram = await telemetryReceiver.ReceiveAsync(receiveTimeout.Token);
-            if (!PinoMainDecoder.TryDecode(datagram.Buffer, out var telemetry)) continue;
-
-            if (diagnosticWriter is not null)
+            using var receiveTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            receiveTimeout.CancelAfter(telemetryTimeoutMilliseconds);
+            try
             {
-                diagnosticWriter.WriteLine(DiagnosticCsv.FormatRow(telemetry, clock.ElapsedMilliseconds));
-                diagnosticRows++;
-                if (diagnosticRows % 60 == 0) diagnosticWriter.Flush();
-                if (diagnosticRows % 120 == 0)
+                var datagram = await telemetryReceiver.ReceiveAsync(receiveTimeout.Token);
+                if (!PinoMainDecoder.TryDecode(datagram.Buffer, out var telemetry)) continue;
+
+                if (diagnosticWriter is not null)
                 {
-                    var peakSlip = telemetry.TireSlipRatios.Max(slip => MathF.Abs(slip));
-                    var acceleration = telemetry.AccelerationLocal ?? [0, 0, 0];
-                    var accelerationMagnitude = MathF.Sqrt(acceleration.Sum(axis => axis * axis));
-                    Console.WriteLine($"DIAG rows={diagnosticRows} speed={telemetry.SpeedMetersPerSecond * 3.6f:F0}km/h " +
-                        $"rpm={telemetry.EngineRpm} slip={peakSlip:F2} accel={accelerationMagnitude:F1}m/s² " +
-                        $"health={telemetry.Health}");
+                    diagnosticWriter.WriteLine(DiagnosticCsv.FormatRow(telemetry, clock.ElapsedMilliseconds));
+                    diagnosticRows++;
+                    if (diagnosticRows % 60 == 0) diagnosticWriter.Flush();
+                    if (diagnosticRows % 120 == 0)
+                    {
+                        var peakSlip = telemetry.TireSlipRatios.Max(slip => MathF.Abs(slip));
+                        var acceleration = telemetry.AccelerationLocal ?? [0, 0, 0];
+                        var accelerationMagnitude = MathF.Sqrt(acceleration.Sum(axis => axis * axis));
+                        Console.WriteLine($"DIAG rows={diagnosticRows} speed={telemetry.SpeedMetersPerSecond * 3.6f:F0}km/h " +
+                            $"rpm={telemetry.EngineRpm} slip={peakSlip:F2} accel={accelerationMagnitude:F1}m/s² " +
+                            $"health={telemetry.Health}");
+                    }
+                }
+
+                lastPacket = clock.ElapsedMilliseconds;
+                resetSent = false;
+                if (!connected)
+                {
+                    connected = true;
+                    Console.WriteLine("Telemetry connected.");
+                }
+
+                if (clock.ElapsedMilliseconds - lastSend < sendIntervalMilliseconds) continue;
+                await SendAsync(DsxMapper.Map(telemetry, clock.ElapsedMilliseconds), cancellationToken);
+                lastSend = clock.ElapsedMilliseconds;
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                if (!resetSent && clock.ElapsedMilliseconds - lastPacket >= telemetryTimeoutMilliseconds)
+                {
+                    await SendAsync(DsxMapper.Reset(), cancellationToken);
+                    resetSent = true;
+                    if (connected) Console.WriteLine("Telemetry lost; controller effects reset.");
+                    connected = false;
                 }
             }
-
-            lastPacket = clock.ElapsedMilliseconds;
-            resetSent = false;
-            if (!connected)
-            {
-                connected = true;
-                Console.WriteLine("Telemetry connected.");
-            }
-
-            if (clock.ElapsedMilliseconds - lastSend < sendIntervalMilliseconds) continue;
-            await SendAsync(DsxMapper.Map(telemetry, clock.ElapsedMilliseconds), stopping.Token);
-            lastSend = clock.ElapsedMilliseconds;
         }
-        catch (OperationCanceledException) when (!stopping.IsCancellationRequested)
-        {
-            if (!resetSent && clock.ElapsedMilliseconds - lastPacket >= telemetryTimeoutMilliseconds)
-            {
-                await SendAsync(DsxMapper.Reset(), stopping.Token);
-                resetSent = true;
-                if (connected) Console.WriteLine("Telemetry lost; controller effects reset.");
-                connected = false;
-            }
-        }
-    }
+    }, stopping.Token);
 }
 finally
 {
     diagnosticWriter?.Dispose();
-    await SendAsync(DsxMapper.Reset(), CancellationToken.None);
+    try
+    {
+        await SendAsync(DsxMapper.Reset(), CancellationToken.None);
+    }
+    catch (SocketException) when (stopping.IsCancellationRequested)
+    {
+        // DSX may already be closed during an otherwise clean user shutdown.
+    }
 }
+Console.WriteLine("Stopped cleanly.");
 
 async Task SendAsync(DsxPacket packet, CancellationToken cancellationToken)
 {
