@@ -4,13 +4,13 @@ using System.Net.Sockets;
 using System.Text;
 using Wf2Dsx.Core;
 
-const int defaultPinoPort = 5606;
+const int defaultPinoPort = 23123;
 const int dsxPort = 6969;
 const int sendIntervalMilliseconds = 50;
 const int telemetryTimeoutMilliseconds = 500;
 
 var pinoPort = ReadPinoPort(args, defaultPinoPort);
-using var telemetryReceiver = new UdpClient(pinoPort);
+using var telemetryReceiver = new UdpClient(new IPEndPoint(IPAddress.Loopback, pinoPort));
 using var dsxSender = new UdpClient();
 var dsxEndpoint = new IPEndPoint(IPAddress.Loopback, dsxPort);
 using var stopping = new CancellationTokenSource();

@@ -6,6 +6,9 @@ Bridge Wreckfest 2 Pino UDP telemetry to the DSX UDP API for one DualSense contr
 The first release covers RPM lighting, gear LEDs, brake/ABS feedback, driven-wheel
 slip feedback, engine temperature, running state, and drivetrain damage.
 
+The bridge listens on Wreckfest 2's official default UDP port `23123` and sends
+to the BeamNG mod's fixed DSX endpoint `127.0.0.1:6969`.
+
 ## Tech stack
 
 - C# on .NET 8
