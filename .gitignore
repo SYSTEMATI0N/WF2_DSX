@@ -1,4 +1,8 @@
 bin/
 obj/
 publish/
+outputs/
+artifacts/
+diagnostics/
+*.log
 *.user

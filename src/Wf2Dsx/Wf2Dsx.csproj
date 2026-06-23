@@ -9,6 +9,12 @@
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
     <DebugType>none</DebugType>
+    <Product>WF2_DSX</Product>
+    <AssemblyTitle>WF2_DSX - DualSense for Wreckfest 2</AssemblyTitle>
+    <Description>Bridges Wreckfest 2 Pino telemetry to DSX adaptive triggers and lightbar.</Description>
+    <Version>1.0.0</Version>
+    <InformationalVersion>1.0.0</InformationalVersion>
+    <ApplicationIcon>app.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Wf2Dsx.Core/Wf2Dsx.Core.csproj" />

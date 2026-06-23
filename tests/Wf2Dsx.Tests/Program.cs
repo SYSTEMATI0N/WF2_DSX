@@ -74,7 +74,7 @@ Run("maps driving telemetry to DSX instructions on controller zero", () =>
         Gear: 3, EngineRpm: 6000, EngineRpmMax: 7500, EngineRpmRedline: 6900,
         Throttle: 0.8f, Brake: 0.6f, Clutch: 0, WaterTemperatureCelsius: 110,
         EngineDamage: 0, GearboxDamage: 0,
-        TireSlipRatios: [0.02f, 0.01f, 0.45f, 0.4f]);
+        TireSlipRatios: [0.02f, 0.01f, 0.45f, 0.4f], SpeedMetersPerSecond: 30);
 
     var packet = DsxMapper.Map(telemetry, elapsedMilliseconds: 1000);
     var json = DsxJson.Serialize(packet);
@@ -85,6 +85,139 @@ Run("maps driving telemetry to DSX instructions on controller zero", () =>
     Assert(json.Contains("[0,1,17,0,4,10]"), "ABS trigger instruction");
     Assert(json.Contains("[0,true,true,true,false,false]"), "third gear LEDs");
     Assert(json.Contains("\"type\":5,\"parameters\":[0,1]"), "temperature pulse");
+});
+
+Run("ignores saturated slip on a stationary car (no false lockup or wheelspin)", () =>
+{
+    // A parked car with the brake floored: Pino reports every slip ratio at -1 and the
+    // rear-right at +1. These must not be read as a wheel lock or wheelspin.
+    var telemetry = new TelemetryFrame(
+        InRace: true, PlayerDriving: true, EngineRunning: true, EngineMisfiring: false,
+        AbsActive: false, TcsActive: false, Driveline: DrivelineType.RearWheelDrive,
+        Gear: 0, EngineRpm: 900, EngineRpmMax: 7000, EngineRpmRedline: 6500,
+        Throttle: 0, Brake: 1f, Clutch: 0, WaterTemperatureCelsius: 90,
+        EngineDamage: 0, GearboxDamage: 0,
+        TireSlipRatios: [-1f, -1f, -1f, 1f], SpeedMetersPerSecond: 0);
+
+    var json = DsxJson.Serialize(DsxMapper.Map(telemetry, 0));
+
+    Assert(json.Contains("[0,1,13,0,4]"), "brake should be firm resistance, not a lockup pulse");
+    Assert(json.Contains("[0,2,0,0,0,0]"), "throttle should be normal, not a wheelspin pulse");
+    Assert(!json.Contains("[0,1,17"), "no left-trigger lockup vibration at a standstill");
+});
+
+Run("conveys road roughness through the throttle trigger when not on slip", () =>
+{
+    var smooth = new TelemetryFrame(
+        InRace: true, PlayerDriving: true, EngineRunning: true, EngineMisfiring: false,
+        AbsActive: false, TcsActive: false, Driveline: DrivelineType.RearWheelDrive,
+        Gear: 3, EngineRpm: 4000, EngineRpmMax: 7000, EngineRpmRedline: 6500,
+        Throttle: 0.4f, Brake: 0, Clutch: 0, WaterTemperatureCelsius: 90,
+        EngineDamage: 0, GearboxDamage: 0, TireSlipRatios: [0, 0, 0, 0],
+        SpeedMetersPerSecond: 25, SuspensionVelocities: [0.1f, -0.15f, 0.12f, -0.08f]);
+    Assert(DsxJson.Serialize(DsxMapper.Map(smooth, 0)).Contains("[0,2,0,0,0,0]"),
+        "smooth tarmac should leave the throttle quiet");
+
+    var rough = smooth with { SuspensionVelocities = [0.2f, -2.0f, 0.3f, 0.1f] };
+    var roughJson = DsxJson.Serialize(DsxMapper.Map(rough, 0));
+    Assert(roughJson.Contains("[0,2,17,0,7,35]"),
+        "a hard bump should buzz the throttle at the surface frequency");
+
+    // A standstill must stay silent even with noisy suspension values.
+    var parked = rough with { SpeedMetersPerSecond = 0 };
+    Assert(DsxJson.Serialize(DsxMapper.Map(parked, 0)).Contains("[0,2,0,0,0,0]"),
+        "no road feel while parked");
+});
+
+Run("honours config toggles (disabled effects fall back to neutral)", () =>
+{
+    var rough = new TelemetryFrame(
+        InRace: true, PlayerDriving: true, EngineRunning: true, EngineMisfiring: false,
+        AbsActive: false, TcsActive: false, Driveline: DrivelineType.RearWheelDrive,
+        Gear: 3, EngineRpm: 4000, EngineRpmMax: 7000, EngineRpmRedline: 6500,
+        Throttle: 0.4f, Brake: 0, Clutch: 0, WaterTemperatureCelsius: 90,
+        EngineDamage: 0, GearboxDamage: 0, TireSlipRatios: [0, 0, 0, 0],
+        SpeedMetersPerSecond: 25, SuspensionVelocities: [0.2f, -2.0f, 0.3f, 0.1f]);
+
+    try
+    {
+        DsxMapper.Settings = new DsxSettings
+        {
+            SurfaceFeel = false, Lightbar = false, GearLeds = false, Brake = false
+        };
+        var json = DsxJson.Serialize(DsxMapper.Map(rough, 0));
+
+        Assert(json.Contains("[0,2,0,0,0,0]"), "surface buzz should be off when disabled");
+        Assert(json.Contains("[0,1,0,0,0,0]"), "brake resistance should be off when disabled");
+        Assert(json.Contains("\"type\":2,\"parameters\":[0,0,0,0]"), "lightbar should be dark when disabled");
+        Assert(json.Contains("[0,false,false,false,false,false]"), "gear LEDs should be off when disabled");
+    }
+    finally
+    {
+        DsxMapper.Settings = new DsxSettings();
+    }
+});
+
+Run("flashes the lightbar off near the rev limiter", () =>
+{
+    var telemetry = new TelemetryFrame(
+        InRace: true, PlayerDriving: true, EngineRunning: true, EngineMisfiring: false,
+        AbsActive: false, TcsActive: false, Driveline: DrivelineType.RearWheelDrive,
+        Gear: 4, EngineRpm: 6900, EngineRpmMax: 7000, EngineRpmRedline: 6800,
+        Throttle: 1f, Brake: 0, Clutch: 0, WaterTemperatureCelsius: 90,
+        EngineDamage: 0, GearboxDamage: 0, TireSlipRatios: [0, 0, 0, 0]);
+
+    var off = DsxJson.Serialize(DsxMapper.Map(telemetry, 60));   // blink "off" phase
+    var on = DsxJson.Serialize(DsxMapper.Map(telemetry, 0));     // blink "on" phase
+    Assert(off.Contains("\"type\":2,\"parameters\":[0,0,0,0]"), "rev limiter should blink the bar off");
+    Assert(!on.Contains("\"type\":2,\"parameters\":[0,0,0,0]"), "and back on between blinks");
+});
+
+Run("keeps launch wheelspin at 1-2 km/h (throttle-gated, not speed-gated)", () =>
+{
+    // Real launch: rear wheels spin (slip = 1) while the car is barely rolling.
+    var telemetry = new TelemetryFrame(
+        InRace: true, PlayerDriving: true, EngineRunning: true, EngineMisfiring: false,
+        AbsActive: false, TcsActive: false, Driveline: DrivelineType.RearWheelDrive,
+        Gear: 1, EngineRpm: 6000, EngineRpmMax: 7000, EngineRpmRedline: 6500,
+        Throttle: 1f, Brake: 0, Clutch: 0, WaterTemperatureCelsius: 90,
+        EngineDamage: 0, GearboxDamage: 0,
+        TireSlipRatios: [0f, 0f, 1f, 1f], SpeedMetersPerSecond: 0.55f);
+
+    var json = DsxJson.Serialize(DsxMapper.Map(telemetry, 0));
+    Assert(json.Contains("[0,2,17,0,7,30]"), "launch wheelspin should pulse the right trigger at full force");
+});
+
+Run("pulses the brake trigger on a real moving wheel lock", () =>
+{
+    var telemetry = new TelemetryFrame(
+        InRace: true, PlayerDriving: true, EngineRunning: true, EngineMisfiring: false,
+        AbsActive: false, TcsActive: false, Driveline: DrivelineType.RearWheelDrive,
+        Gear: 3, EngineRpm: 5000, EngineRpmMax: 7000, EngineRpmRedline: 6500,
+        Throttle: 0, Brake: 0.9f, Clutch: 0, WaterTemperatureCelsius: 90,
+        EngineDamage: 0, GearboxDamage: 0,
+        TireSlipRatios: [-0.5f, -0.45f, -0.3f, -0.3f], SpeedMetersPerSecond: 25);
+
+    var json = DsxJson.Serialize(DsxMapper.Map(telemetry, 0));
+    Assert(json.Contains("[0,1,17,0,"), "moving lockup should drive an AutomaticGun pulse");
+    Assert(json.Contains(",30]"), "lockup pulse should use the 30 Hz frequency");
+});
+
+Run("flashes the lightbar white on a collision impact", () =>
+{
+    var telemetry = new TelemetryFrame(
+        InRace: true, PlayerDriving: true, EngineRunning: true, EngineMisfiring: false,
+        AbsActive: false, TcsActive: false, Driveline: DrivelineType.RearWheelDrive,
+        Gear: 4, EngineRpm: 4000, EngineRpmMax: 7000, EngineRpmRedline: 6500,
+        Throttle: 0.5f, Brake: 0, Clutch: 0, WaterTemperatureCelsius: 90,
+        EngineDamage: 0, GearboxDamage: 0,
+        TireSlipRatios: [0, 0, 0, 0], SpeedMetersPerSecond: 30);
+
+    var flashed = DsxJson.Serialize(DsxMapper.Map(telemetry, 0, collisionImpact: 1f));
+    Assert(flashed.Contains("\"type\":2,\"parameters\":[0,255,255,255]"), "full impact should be white");
+
+    var calm = DsxJson.Serialize(DsxMapper.Map(telemetry, 0, collisionImpact: 0f));
+    Assert(!calm.Contains("[0,255,255,255]"), "no flash without an impact");
 });
 
 Run("maps inactive player to a complete controller reset", () =>
