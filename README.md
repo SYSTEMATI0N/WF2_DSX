@@ -7,8 +7,11 @@ throttle, and watch the lightbar track your RPM.
 ## Quick start (no Steam settings needed)
 
 1. **Install DSX** and connect your DualSense (DSX is the app that drives the controller).
-2. **Run `WF2_DSX.exe`** (double-click). A small status window opens — keep it open.
-3. **Play Wreckfest 2** as usual.
+2. **Enable the UDP server in DSX:** open DSX → **Settings** → turn on the UDP server / UDP
+   port listener and leave the port at **6969** (the default). WF2_DSX sends effects to
+   `127.0.0.1:6969`, so without this DSX won't receive anything.
+3. **Run `WF2_DSX.exe`** (double-click). A small status window opens — keep it open.
+4. **Play Wreckfest 2** as usual.
 
 That's it. WF2_DSX turns on the game's telemetry by itself, waits for the race, and the
 effects kick in. Close the window when you're done.

@@ -275,7 +275,7 @@ async Task SendAsync(DsxPacket packet, CancellationToken cancellationToken)
         if (dsxReachable)
         {
             dsxReachable = false;
-            Console.WriteLine("[wait]  Waiting for DSX - open the DSX app.");
+            Console.WriteLine("[wait]  Waiting for DSX - open DSX and enable its UDP server (port 6969).");
         }
     }
 }
