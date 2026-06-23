@@ -132,3 +132,9 @@ talks to [DSX](https://store.steampowered.com/app/1812620/DSX/) over its local U
 
 Released under the [MIT License](LICENSE) © 2026 SYSTEMATI0N — free to use, modify, and
 redistribute; just keep the copyright notice.
+
+## Support
+
+WF2_DSX is free and always will be. If it made your races more fun and you'd like to chip in,
+you can [buy me a coffee](https://donate.stripe.com/7sY00jgfG3ry4DG4kw0gw00). Completely
+optional — thank you either way!
